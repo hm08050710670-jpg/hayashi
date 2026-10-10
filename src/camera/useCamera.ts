@@ -17,13 +17,16 @@ function classify(err: unknown): CameraErrorKind {
 
 /**
  * 背面カメラの起動・停止と、フレームの取り出しを行う。
- * grabFrame() は静止画の撮影に使うほか、第3段階で一定間隔のフレーム取得にもそのまま使える。
+ * grabFrame() は静止画の撮影に、grabPixels() はリアルタイム解析（一定間隔の縮小フレーム取得）に使う。
  */
 export function useCamera() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [state, setState] = useState<CameraState>({ status: 'starting' });
   const [attempt, setAttempt] = useState(0);
+  /** 映像の大きさ（px）。重ね描きを映像にぴったり合わせるために使う */
+  const [frame, setFrame] = useState<{ width: number; height: number } | null>(null);
+  const smallCanvas = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -84,6 +87,7 @@ export function useCamera() {
           setState({ status: 'error', error: 'busy' });
           return;
         }
+        setFrame({ width: video.videoWidth, height: video.videoHeight });
         setState({ status: 'ready' });
       } catch (err) {
         if (!cancelled) setState({ status: 'error', error: classify(err) });
@@ -121,5 +125,32 @@ export function useCamera() {
     return canvas;
   }, []);
 
-  return { videoRef, state, retry, grabFrame };
+  /**
+   * 現在の映像を、解析用に小さく縮めた画素として取り出す。
+   * 毎回キャンバスを作り直さないよう、同じキャンバスを使い回す。
+   */
+  const grabPixels = useCallback((targetWidth: number): ImageData | null => {
+    const video = videoRef.current;
+    if (!video || video.videoWidth === 0 || video.videoHeight === 0 || video.readyState < 2) return null;
+    const w = Math.min(targetWidth, video.videoWidth);
+    const h = Math.max(1, Math.round((video.videoHeight / video.videoWidth) * w));
+    const canvas = smallCanvas.current ?? document.createElement('canvas');
+    smallCanvas.current = canvas;
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
+    }
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return null;
+    ctx.drawImage(video, 0, 0, w, h);
+    // 端末を回すなどして映像の向きが変わったら、重ね描きの基準も更新する。
+    setFrame((prev) =>
+      prev && prev.width === video.videoWidth && prev.height === video.videoHeight
+        ? prev
+        : { width: video.videoWidth, height: video.videoHeight },
+    );
+    return ctx.getImageData(0, 0, w, h);
+  }, []);
+
+  return { videoRef, state, frame, retry, grabFrame, grabPixels };
 }

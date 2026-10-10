@@ -44,7 +44,9 @@ export function Result({ photo, input, safety, onBand, onEdit, onRetake, onOpenS
     <div className="screen">
       <header className="bar">
         <h1 className="bar-title">解析結果</h1>
-        <span className="tag">静止画・手動指定</span>
+        <span className="tag">
+          {input.obstacles.some((o) => o.source === 'auto') ? '静止画・自動検出あり' : '静止画・手動指定'}
+        </span>
         <button type="button" className="icon-btn" onClick={onOpenSettings} aria-label="設定">
           <GearIcon />
         </button>

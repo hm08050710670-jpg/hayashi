@@ -16,7 +16,7 @@ export function aimText(aimDeg: number): string {
 export const LEVEL_TEXT: Record<Level, string> = {
   green: '比較的通しやすい',
   yellow: '注意が必要',
-  red: '難易度が高い',
+  red: '難しい',
 };
 
 /**

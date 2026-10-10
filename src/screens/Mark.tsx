@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react';
+import { OPENING_PARAMS, blockedSpans, detectOpenings } from '../analysis/openingDetector';
+import { spansToObstacles } from '../camera/useLiveAnalysis';
 import { Chips } from '../components/Chips';
 import { BackIcon, TrashIcon, UndoIcon } from '../components/Icons';
 import { KIND_LABEL, ObstacleLayer, obstacleTag } from '../components/ObstacleLayer';
 import { PhotoStage, type StageSize } from '../components/PhotoStage';
+import { photoToPixels } from '../image/process';
 import {
   CLEARANCES,
   CLUBS,
@@ -61,14 +64,18 @@ export function Mark(props: Props) {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
   const [askSafety, setAskSafety] = useState(false);
+  const [autoNote, setAutoNote] = useState<string | null>(null);
+  const [detecting, setDetecting] = useState(false);
   const drag = useRef<{ pointerId: number; x: number; y: number; moved: boolean } | null>(null);
   const sizeRef = useRef<StageSize>({ w: 1, h: 1 });
 
   const selected = obstacles.find((o) => o.id === selectedId) ?? null;
   const hasBranch = obstacles.some((o) => o.kind === 'branch');
-  const counts = (['trunk', 'branch', 'ground'] as ObstacleKind[])
-    .map((k) => `${KIND_LABEL[k]} ${obstacles.filter((o) => o.kind === k).length}`)
-    .join('　');
+  const autoCount = obstacles.filter((o) => o.source === 'auto').length;
+  const counts =
+    (['trunk', 'branch', 'ground'] as ObstacleKind[])
+      .map((k) => `${KIND_LABEL[k]} ${obstacles.filter((o) => o.kind === k && o.source !== 'auto').length}`)
+      .join('　') + (autoCount > 0 ? `　自動 ${autoCount}` : '');
 
   useEffect(() => {
     if (!confirmClear) return;
@@ -164,6 +171,44 @@ export function Mark(props: Props) {
     setConfirmClear(false);
   };
 
+  /** 写真から障害物を自動検出する（試験版）。前回の自動検出の結果は置き換え、手動指定は残す。 */
+  const autoDetect = async () => {
+    if (detecting) return;
+    setDetecting(true);
+    setAutoNote(null);
+    try {
+      const pixels = await photoToPixels(photo, OPENING_PARAMS.analysisWidth);
+      const detection = detectOpenings(pixels);
+      const manual = obstacles.filter((o) => o.source !== 'auto');
+      if (detection.reason !== 'ok') {
+        onObstacles(manual);
+        setAutoNote(
+          detection.reason === 'too_dark'
+            ? '写真が暗すぎて、自動検出できませんでした。手動で指定してください。'
+            : '奥が明るく写っていないため、自動検出できませんでした。手動で指定してください。',
+        );
+      } else {
+        const stamp = Date.now().toString(36);
+        const found = spansToObstacles(
+          blockedSpans(detection.open, OPENING_PARAMS.minOpenRunPx),
+          detection.bandTop,
+          detection.bandBottom,
+        ).map((o) => ({ ...o, id: `${o.id}-${stamp}` }));
+        onObstacles([...manual, ...found]);
+        setAutoNote(
+          found.length === 0
+            ? '障害物は検出されませんでした。写真と合っているか確認し、必要なら手動で指定してください。'
+            : `${found.length}か所を「障害物または未確認」として追加しました。写真と合っていない範囲は、選んで削除するか、手動で追加してください。`,
+        );
+      }
+      setSelectedId(null);
+    } catch {
+      setAutoNote('自動検出に失敗しました。手動で指定してください。');
+    } finally {
+      setDetecting(false);
+    }
+  };
+
   const setClearance = (clearance: ClearanceId) => {
     if (!selected) return;
     onObstacles(obstacles.map((o) => (o.id === selected.id ? { ...o, clearance } : o)));
@@ -250,6 +295,18 @@ export function Mark(props: Props) {
           </button>
         </div>
 
+        <div className="auto-row">
+          <button type="button" className="btn small" onClick={autoDetect} disabled={detecting}>
+            {detecting ? '検出中…' : '自動検出（試験版）'}
+          </button>
+          <span className="muted small-text">写真の中央の帯で、奥が見通せない範囲を障害物として追加します。</span>
+        </div>
+        {autoNote ? (
+          <p className="banner" role="status">
+            {autoNote}
+          </p>
+        ) : null}
+
         <Chips
           label="ボールのライ"
           options={LIES.map((l) => ({ value: l.id, label: l.label }))}
@@ -275,7 +332,9 @@ export function Mark(props: Props) {
           </>
         ) : null}
 
-        <p className="muted small-text">AIによる木の自動検出は未実装です。指定した障害物だけを使って計算します。</p>
+        <p className="muted small-text">
+          自動検出は画像処理による試験版で、AIモデルではありません。画面に出ている障害物だけを使って計算します。
+        </p>
       </div>
 
       <footer className="actions">

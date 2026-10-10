@@ -13,11 +13,15 @@ import {
   type ScoreBand,
 } from '../model/params';
 
+import { LIVE_RATE_OPTIONS } from '../storage';
+
 interface Props {
   band: ScoreBand;
   onBand: (band: ScoreBand) => void;
   focalEq: number;
   onFocalEq: (focalEq: number) => void;
+  liveRate: number;
+  onLiveRate: (rate: number) => void;
   onShowNotice: () => void;
   onReset: () => void;
   onBack: () => void;
@@ -30,16 +34,34 @@ const IMPLEMENTED = [
   '障害物（幹・枝・地面）の手動指定',
   '指定した障害物からの候補ルートの計算',
   'スコア帯別の推定確率（仮モデル）',
+  'リアルタイム解析（試験版）：映像から見通せる方向を自動で探し、ルートと推定確率を更新',
+  '静止画での障害物の自動検出（試験版）と、手動での修正',
 ];
 
 const NOT_IMPLEMENTED = [
-  'AIによる木・障害物の自動検出（第2段階）',
-  'カメラをかざしたままのリアルタイム解析（第3段階）',
+  'AIモデルによる木・障害物の検出（現在の自動検出は画像処理によるもので、実際の林での精度は未検証）',
+  '枝・切り株・地面の障害物の自動検出',
   '人やカートの自動検出（現在は自己申告で確認）',
-  '奥行きの推定、クラブ別の球筋、実測データによる補正（第4段階）',
+  '奥行きの推定、クラブ別の球筋、実測データによる補正',
 ];
 
-export function Settings({ band, onBand, focalEq, onFocalEq, onShowNotice, onReset, onBack }: Props) {
+const RATE_LABEL: Record<number, string> = {
+  2: '低（毎秒2回）',
+  4: '標準（毎秒4回）',
+  8: '高（毎秒8回）',
+};
+
+export function Settings({
+  band,
+  onBand,
+  focalEq,
+  onFocalEq,
+  liveRate,
+  onLiveRate,
+  onShowNotice,
+  onReset,
+  onBack,
+}: Props) {
   const [confirmReset, setConfirmReset] = useState(false);
 
   useEffect(() => {
@@ -70,6 +92,14 @@ export function Settings({ band, onBand, focalEq, onFocalEq, onShowNotice, onRes
           value={focalEq}
           onChange={onFocalEq}
           hint="写真の横位置を角度に直すときの仮定です。機種やカメラの設定で変わります。分からなければ「標準」のままにしてください。"
+        />
+
+        <Chips
+          label="リアルタイム解析の更新頻度"
+          options={LIVE_RATE_OPTIONS.map((r) => ({ value: r, label: RATE_LABEL[r] ?? `毎秒${r}回` }))}
+          value={liveRate}
+          onChange={onLiveRate}
+          hint="高くすると反応が速くなりますが、バッテリーの消費が増えます。端末の処理が追いつかない場合は、自動で頻度を下げます。"
         />
 
         <section className="detail">
@@ -139,7 +169,7 @@ export function Settings({ band, onBand, focalEq, onFocalEq, onShowNotice, onRes
           </div>
           <p className="muted small-text">
             色分けの基準：{Math.round(LEVEL_THRESHOLDS.green * 100)}%以上は「比較的通しやすい」、
-            {Math.round(LEVEL_THRESHOLDS.yellow * 100)}%以上は「注意が必要」、それ未満は「難易度が高い」。障害物の両側には、指定のずれとして
+            {Math.round(LEVEL_THRESHOLDS.yellow * 100)}%以上は「注意が必要」、それ未満は「難しい」。障害物の両側には、指定のずれとして
             {GEOMETRY.markToleranceDeg}°とボール半径分の余裕を取ります。
           </p>
         </section>
@@ -174,7 +204,7 @@ export function Settings({ band, onBand, focalEq, onFocalEq, onShowNotice, onRes
             {confirmReset ? 'もう一度押すと初期化します' : '保存した設定を初期化'}
           </button>
         </div>
-        <p className="muted small-text">GOLF ESCAPE AI 試作版（第1段階：静止画解析）</p>
+        <p className="muted small-text">GOLF ESCAPE AI 試作版（静止画解析＋リアルタイム解析の試験版）</p>
       </div>
     </div>
   );

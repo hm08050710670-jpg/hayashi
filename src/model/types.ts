@@ -5,7 +5,7 @@ export type ObstacleKind = 'trunk' | 'branch' | 'ground';
 
 /**
  * 障害物。座標は写真に対する割合（0〜1、左上原点）。
- * source は指定元。第1段階は 'manual' のみ。AI自動検出（第2段階以降）は 'auto' を使う。
+ * source は指定元。'manual' は利用者の手動指定、'auto' は自動検出。
  */
 export interface Obstacle {
   id: string;

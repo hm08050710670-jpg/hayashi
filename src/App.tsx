@@ -17,6 +17,7 @@ export function App() {
   const [band, setBand] = useState<ScoreBand | null>(() => storage.loadBand());
   const [noticeAccepted, setNoticeAccepted] = useState(() => storage.loadNoticeAccepted());
   const [focalEq, setFocalEq] = useState(() => storage.loadFocalEq());
+  const [liveRate, setLiveRate] = useState(() => storage.loadLiveRate());
 
   const [screen, setScreen] = useState<Screen>(() =>
     !storage.loadNoticeAccepted() ? 'notice' : storage.loadBand() === null ? 'score' : 'capture',
@@ -47,6 +48,11 @@ export function App() {
   const chooseFocal = useCallback((next: number) => {
     setFocalEq(next);
     storage.saveFocalEq(next);
+  }, []);
+
+  const chooseLiveRate = useCallback((next: number) => {
+    setLiveRate(next);
+    storage.saveLiveRate(next);
   }, []);
 
   const takePhoto = useCallback(
@@ -123,12 +129,15 @@ export function App() {
         onBand={chooseBand}
         focalEq={focalEq}
         onFocalEq={chooseFocal}
+        liveRate={liveRate}
+        onLiveRate={chooseLiveRate}
         onShowNotice={() => setScreen('notice')}
         onReset={() => {
           storage.clearAll();
           setBand(null);
           setNoticeAccepted(false);
           setFocalEq(storage.loadFocalEq());
+          setLiveRate(storage.loadLiveRate());
           releasePhotoUrl();
           setPhoto(null);
           setObstacles([]);
@@ -181,6 +190,8 @@ export function App() {
   return (
     <Capture
       band={band}
+      focalEq={focalEq}
+      liveRate={liveRate}
       onPhoto={takePhoto}
       onChangeScore={() => {
         setReturnTo('capture');

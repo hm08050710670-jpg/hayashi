@@ -11,6 +11,8 @@ interface Props {
   size: StageSize;
   selectedId: string | null;
   onSelect: (id: string) => void;
+  /** 矢印の出発点の高さ（表示の高さに対する割合）。省略時は下端（ボール側） */
+  originY?: number;
 }
 
 /**
@@ -18,13 +20,13 @@ interface Props {
  * 写真の下端中央（ボール側）から、隙間の通過できる範囲へ向かう帯と、狙う方向の矢印を重ねる。
  * 色だけに頼らないよう、ラベルに記号と数値（または「判定不能」）を必ず入れる。
  */
-export function RouteLayer({ routes, obstacles, frame, focalEq, size, selectedId, onSelect }: Props) {
+export function RouteLayer({ routes, obstacles, frame, focalEq, size, selectedId, onSelect, originY = 1 }: Props) {
   const blockers = obstacles.filter((o) => o.kind !== 'branch');
   const meanY = blockers.length
     ? blockers.reduce((sum, o) => sum + o.y + o.h * 0.5, 0) / blockers.length
     : 0.5;
   const tipY = Math.min(0.72, Math.max(0.3, meanY)) * size.h;
-  const origin = { x: size.w / 2, y: size.h };
+  const origin = { x: size.w / 2, y: size.h * originY };
 
   // 選択中のルートを最後に描いて、いちばん手前に出す。
   const ordered = [...routes].sort((a, b) => Number(a.id === selectedId) - Number(b.id === selectedId));

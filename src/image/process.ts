@@ -88,3 +88,22 @@ export async function fileToPhoto(file: File): Promise<Photo> {
     URL.revokeObjectURL(srcUrl);
   }
 }
+
+/** 写真を、自動検出のための小さな画素データにする。 */
+export async function photoToPixels(photo: Pick<Photo, 'url' | 'width' | 'height'>, targetWidth: number): Promise<ImageData> {
+  const img = new Image();
+  await new Promise<void>((resolve, reject) => {
+    img.onload = () => resolve();
+    img.onerror = () => reject(new Error('image load failed'));
+    img.src = photo.url;
+  });
+  const w = Math.min(targetWidth, photo.width);
+  const h = Math.max(1, Math.round((photo.height / photo.width) * w));
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) throw new Error('no 2d context');
+  ctx.drawImage(img, 0, 0, w, h);
+  return ctx.getImageData(0, 0, w, h);
+}

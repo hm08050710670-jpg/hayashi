@@ -8,6 +8,7 @@ const KEYS = {
   band: 'golf-escape-ai.band',
   notice: 'golf-escape-ai.notice-accepted',
   focal: 'golf-escape-ai.focal-eq',
+  liveRate: 'golf-escape-ai.live-rate',
 };
 
 function read(key: string): string | null {
@@ -42,8 +43,19 @@ export function loadFocalEq(): number {
 }
 export const saveFocalEq = (focalEq: number) => write(KEYS.focal, String(focalEq));
 
+/** リアルタイム解析の更新頻度（1秒あたりの回数）の選択肢 */
+export const LIVE_RATE_OPTIONS = [2, 4, 8];
+export const DEFAULT_LIVE_RATE = 4;
+
+export function loadLiveRate(): number {
+  const n = Number(read(KEYS.liveRate));
+  return LIVE_RATE_OPTIONS.includes(n) ? n : DEFAULT_LIVE_RATE;
+}
+export const saveLiveRate = (rate: number) => write(KEYS.liveRate, String(rate));
+
 export function clearAll(): void {
   write(KEYS.band, null);
   write(KEYS.notice, null);
   write(KEYS.focal, null);
+  write(KEYS.liveRate, null);
 }

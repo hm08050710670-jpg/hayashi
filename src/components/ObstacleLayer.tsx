@@ -9,6 +9,7 @@ export const KIND_LABEL: Record<ObstacleKind, string> = {
 };
 
 export function obstacleTag(o: Obstacle): string {
+  if (o.source === 'auto') return '自動検出';
   if (o.kind !== 'branch') return KIND_LABEL[o.kind];
   const c = CLEARANCES.find((x) => x.id === o.clearance);
   return `枝 ${c ? c.label : ''}`;
@@ -25,6 +26,7 @@ interface Props {
 /**
  * 障害物の矩形を描く。種類は色ではなく、線の種類・塗り・文字で区別する。
  * 幹：斜線の塗り＋実線 / 枝：破線 / 地面：点線
+ * 自動検出の範囲は数が多くなりやすいので、選択したときだけ名前を出す。
  */
 export function ObstacleLayer({ obstacles, size, selectedId, dim }: Props) {
   return (
@@ -46,7 +48,7 @@ export function ObstacleLayer({ obstacles, size, selectedId, dim }: Props) {
         return (
           <g key={o.id} className={`obstacle ${o.kind}${o.id === selectedId ? ' selected' : ''}`}>
             <rect className="obstacle-box" x={x} y={y} width={w} height={h} rx="3" />
-            {dim ? null : (
+            {dim || (o.source === 'auto' && o.id !== selectedId) ? null : (
               <g>
                 <rect className="obstacle-tag-bg" x={x} y={tagY} width={tagW} height="18" rx="3" />
                 <text className="obstacle-tag" x={x + 5} y={tagY + 13}>
