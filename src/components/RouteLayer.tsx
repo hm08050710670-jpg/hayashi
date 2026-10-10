@@ -13,6 +13,8 @@ interface Props {
   onSelect: (id: string) => void;
   /** 矢印の出発点の高さ（表示の高さに対する割合）。省略時は下端（ボール側） */
   originY?: number;
+  /** true のとき、矢印と帯を省いて、位置を示す点とラベルだけを描く（主役のルートを邪魔しないため） */
+  compact?: boolean;
 }
 
 /**
@@ -20,7 +22,17 @@ interface Props {
  * 写真の下端中央（ボール側）から、隙間の通過できる範囲へ向かう帯と、狙う方向の矢印を重ねる。
  * 色だけに頼らないよう、ラベルに記号と数値（または「判定不能」）を必ず入れる。
  */
-export function RouteLayer({ routes, obstacles, frame, focalEq, size, selectedId, onSelect, originY = 1 }: Props) {
+export function RouteLayer({
+  routes,
+  obstacles,
+  frame,
+  focalEq,
+  size,
+  selectedId,
+  onSelect,
+  originY = 1,
+  compact = false,
+}: Props) {
   const blockers = obstacles.filter((o) => o.kind !== 'branch');
   const meanY = blockers.length
     ? blockers.reduce((sum, o) => sum + o.y + o.h * 0.5, 0) / blockers.length
@@ -62,14 +74,20 @@ export function RouteLayer({ routes, obstacles, frame, focalEq, size, selectedId
             role="button"
             aria-label={`ルート${route.letter}を選択`}
           >
-            <polygon className="route-band" points={`${origin.x},${origin.y} ${left},${tipY} ${right},${tipY}`} />
-            <line className="route-hit" x1={origin.x} y1={origin.y} x2={aim} y2={tipY} />
-            <line className="route-line" x1={origin.x} y1={origin.y} x2={aim} y2={tipY} />
-            <polygon
-              className="route-head"
-              points="0,0 -16,-9 -16,9"
-              transform={`translate(${aim} ${tipY}) rotate(${angle})`}
-            />
+            {compact ? (
+              <circle className="route-dot" cx={aim} cy={tipY} r="5" />
+            ) : (
+              <>
+                <polygon className="route-band" points={`${origin.x},${origin.y} ${left},${tipY} ${right},${tipY}`} />
+                <line className="route-hit" x1={origin.x} y1={origin.y} x2={aim} y2={tipY} />
+                <line className="route-line" x1={origin.x} y1={origin.y} x2={aim} y2={tipY} />
+                <polygon
+                  className="route-head"
+                  points="0,0 -16,-9 -16,9"
+                  transform={`translate(${aim} ${tipY}) rotate(${angle})`}
+                />
+              </>
+            )}
             <line className="route-leader" x1={aim} y1={tipY} x2={pillX + pillW / 2} y2={pillY + pillH} />
             <rect className="route-pill" x={pillX} y={pillY} width={pillW} height={pillH} rx="6" />
             <text className="route-text" x={pillX + pillW / 2} y={pillY + 21} textAnchor="middle">

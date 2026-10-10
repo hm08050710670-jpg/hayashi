@@ -5,15 +5,16 @@
  * この性質を使い、映像の中央付近の帯（目の高さあたり）で、列ごとに次の2つを両方満たすときだけ
  * 「見通せる」とし、それ以外はすべて「障害物または未確認」とする。
  *   1. 帯の中に、奥の明るい背景が上下に連続して見えている。
- *   2. その列の色が、帯の上・帯の中・帯の下で変わっている。
- *      （幹は上から下まで同じ色が続く。開けた方向は、葉・奥の景色・地面と上下で色が変わる。
- *        日が当たった明るい幹や白い幹を「開いている」と誤らないための確認）
+ *   2. その列の色が、帯の上と帯の中で変わっている。
+ *      （幹は上まで同じ色が続く。開けた方向は、上が葉や奥の林、帯の中が明るい景色と、色が変わる。
+ *        日が当たった明るい幹や白い幹を「開いている」と誤らないための確認。
+ *        帯の下は、幹の根元や地面が入って幹でも色が変わるため、比較に使わない）
  * 幹そのものを当てにいくのではなく、「奥が見えている」と確認できた範囲だけを開いているとみなすので、
  * 見落としは「通れない」側に倒れる。
  *
  * 判定できない・誤りやすい場面：
  *  - 奥が明るく写っていない（林の奥に向けている、曇天・夕方・日陰で明暗の差が小さい）→ 判定不能にする
- *  - 開けた方向でも、上下で色があまり変わらない場合 → 未確認として扱う（開いていると表示しない）
+ *  - 開けた方向でも、帯の上と色があまり変わらない場合（上まで空が続くなど）→ 未確認として扱う
  *  - 幹の途中で色が変わる場合（苔、強い影、手前の葉）→ 開いていると誤る可能性が残る
  *  - 帯の高さに入っていない低い枝・切り株・地面の障害物 → 検出しない
  * 実際の林での精度は未検証。しきい値はすべて調整可能な仮の値。
@@ -38,13 +39,15 @@ export interface OpeningParams {
   minBimodality: number;
   /** 明るい背景とみなす下限を、背景の明るさからこの値だけ下に置く（明るい幹を背景と誤らないため） */
   backdropMargin: number;
-  /** 列を「見通せる」とするのに必要な、帯の中で背景が上下に連続して見えている割合 */
-  minOpenFraction: number;
-  /** 列を「見通せる」とするのに必要な、上下の色の変化の下限（0〜255）。これ未満は幹とみなす */
+  /**
+   * 列を「見通せる」とするのに必要な、背景が上下に連続して見えている長さ（画像の高さに対する割合）。
+   * 帯の高さを変えても基準が変わらないよう、帯ではなく画像全体の高さを基準にする。
+   */
+  minOpenRunHeight: number;
+  /** 列を「見通せる」とするのに必要な、帯の上と帯の中の色の差の下限（0〜255）。これ未満は幹とみなす */
   minVerticalChange: number;
-  /** 上下の色の変化を調べるために、帯の上と下にそれぞれ足す範囲（画像の高さに対する割合） */
+  /** 色の差を調べるために、帯の上に取る範囲（画像の高さに対する割合） */
   aboveBand: number;
-  belowBand: number;
   /** 見通せる範囲の幅の下限（px）。これより細いものはノイズとして捨てる */
   minOpenRunPx: number;
   /** 明るい背景が帯全体に占める割合の下限。これ未満は「奥が見えていない」とする */
@@ -55,17 +58,16 @@ export interface OpeningParams {
 
 export const OPENING_PARAMS: OpeningParams = {
   analysisWidth: 192,
-  bandTop: 0.4,
-  bandBottom: 0.58,
+  bandTop: 0.34,
+  bandBottom: 0.62,
   minSeparation: 45,
   minBimodality: 0.55,
   backdropMargin: 45,
-  minOpenFraction: 0.2,
-  minVerticalChange: 22,
+  minOpenRunHeight: 0.036,
+  minVerticalChange: 11,
   aboveBand: 0.25,
-  belowBand: 0.2,
   minOpenRunPx: 2,
-  minBackdropShare: 0.02,
+  minBackdropShare: 0.013,
   darkBelow: 40,
 };
 
@@ -181,7 +183,7 @@ export function detectOpenings(
   // 背景とみなす明るさの下限。背景より明らかに暗いもの（明るめの幹など）は背景に含めない。
   const threshold = Math.max(split, brightMean - params.backdropMargin);
 
-  // 帯の上・帯の中・帯の下の、列ごとの平均の色
+  // 帯の上と帯の中の、列ごとの平均の色
   const zoneColor = (from: number, to: number): Float32Array => {
     const a = Math.max(0, Math.min(H, Math.round(from)));
     const b = Math.max(a + 1, Math.min(H, Math.round(to)));
@@ -199,14 +201,11 @@ export function detectOpenings(
   };
   const above = zoneColor(y0 - H * params.aboveBand, y0);
   const within = zoneColor(y0, y1);
-  const below = zoneColor(y1, y1 + H * params.belowBand);
   const change = new Float32Array(W);
   for (let x = 0; x < W; x++) {
     let d = 0;
-    for (let c = 0; c < 3; c++) {
-      d += Math.abs(above[x * 3 + c] - within[x * 3 + c]) + Math.abs(within[x * 3 + c] - below[x * 3 + c]);
-    }
-    change[x] = d / 6;
+    for (let c = 0; c < 3; c++) d += Math.abs(above[x * 3 + c] - within[x * 3 + c]);
+    change[x] = d / 3;
   }
 
   let backdrop = 0;
@@ -224,9 +223,9 @@ export function detectOpenings(
         run = 0;
       }
     }
-    // 上下の色の変化は、隣の列とならして1列だけのノイズを抑える
+    // 色の差は、隣の列とならして1列だけのノイズを抑える
     const smooth = (change[Math.max(0, x - 1)] + 2 * change[x] + change[Math.min(W - 1, x + 1)]) / 4;
-    open[x] = longest / rows >= params.minOpenFraction && smooth >= params.minVerticalChange ? 1 : 0;
+    open[x] = longest / H >= params.minOpenRunHeight && smooth >= params.minVerticalChange ? 1 : 0;
   }
   if (debug) Object.assign(debug, { threshold, backdropShare: backdrop / n });
   if (backdrop / n < params.minBackdropShare) return { ...base, reason: 'no_backdrop' };

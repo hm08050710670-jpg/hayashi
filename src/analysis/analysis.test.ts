@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { Route } from '../model/types';
 import { LIVE_PARAMS, LiveAnalyzer, smoothRoutes } from './live';
-import { blockedSpans, detectOpenings, type OpeningDetection, type Pixels } from './openingDetector';
+import { OPENING_PARAMS, blockedSpans, detectOpenings, type OpeningDetection, type Pixels } from './openingDetector';
 
 type RGB = [number, number, number];
 
@@ -17,7 +17,10 @@ const WHITE_TRUNK: RGB = [226, 226, 220];
 /** 上から「葉・明るい奥・地面」の背景に、縦に通った幹を描いた画像を作る。 */
 function scene(trunks: { from: number; to: number; color: RGB }[], background?: (y: number) => RGB): Pixels {
   const data = new Uint8ClampedArray(W * H * 4);
-  const bg = background ?? ((y: number) => (y < H * 0.36 ? CANOPY : y < H * 0.62 ? SKY : GROUND));
+  // 判定する帯の少し外側まで、奥の明るい背景が見えている状態を基本にする。
+  const skyTop = H * (OPENING_PARAMS.bandTop - 0.04);
+  const skyBottom = H * (OPENING_PARAMS.bandBottom + 0.04);
+  const bg = background ?? ((y: number) => (y < skyTop ? CANOPY : y < skyBottom ? SKY : GROUND));
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       const trunk = trunks.find((t) => x >= t.from && x < t.to);
@@ -50,7 +53,7 @@ test('暗い幹は障害物、奥の明るい背景が見える列は見通せ�
   assert.ok(Math.abs(spans[1].x * W - 120) <= 2 && Math.abs((spans[1].x + spans[1].w) * W - 136) <= 2);
 });
 
-test('背景と同じくらい明るい幹も、上下で色が変わらなければ障害物とする', () => {
+test('背景と同じくらい明るい幹も、上まで同じ色が続いていれば障害物とする', () => {
   const det = detectOpenings(
     scene([
       { from: 20, to: 44, color: DARK_TRUNK },
@@ -81,7 +84,7 @@ test('明暗の差が小さい画像（奥が明るく見えていない）は�
 test('明るい点がまばらにあるだけの列は、見通せるとしない', () => {
   // 帯の中で1行おきに明るい（葉の隙間の木漏れ日のような状態）列を作る
   const px = scene([{ from: 40, to: 52, color: DARK_TRUNK }]);
-  for (let y = Math.round(H * 0.4); y < Math.round(H * 0.58); y++) {
+  for (let y = Math.round(H * (OPENING_PARAMS.bandTop - 0.04)); y < Math.round(H * (OPENING_PARAMS.bandBottom + 0.04)); y++) {
     for (let x = 90; x < 100; x++) {
       const i = (y * W + x) * 4;
       const v = y % 2 === 0 ? 235 : 30;
@@ -107,8 +110,8 @@ function detection(open: number[], profileValue = 100, reason: OpeningDetection[
   return {
     reason,
     open: Uint8Array.from(open),
-    bandTop: 0.4,
-    bandBottom: 0.58,
+    bandTop: OPENING_PARAMS.bandTop,
+    bandBottom: OPENING_PARAMS.bandBottom,
     brightness: 120,
     profile: Float32Array.from(open.map(() => profileValue)),
   };
@@ -204,4 +207,23 @@ test('帯の中がすべて明るい（暗い手前が写っていない）と�
   // 明るい背景と白い幹だけ：明暗で分けられないので、白い幹を見落とすおそれがある
   const det = detectOpenings(scene([{ from: 80, to: 96, color: WHITE_TRUNK }]));
   assert.equal(det.reason, 'low_contrast');
+});
+
+test('根元で色が変わる明るい幹（下が地面や苔）も、障害物とする', () => {
+  // 帯より下で幹の色が地面の色に変わる：帯の下を比較に使うと、開いていると誤る形
+  const px = scene([
+    { from: 20, to: 44, color: DARK_TRUNK },
+    { from: 80, to: 96, color: [150, 150, 144] },
+  ]);
+  for (let y = Math.round(H * (OPENING_PARAMS.bandBottom + 0.01)); y < H; y++) {
+    for (let x = 80; x < 96; x++) {
+      const i = (y * W + x) * 4;
+      px.data[i] = 60;
+      px.data[i + 1] = 110;
+      px.data[i + 2] = 50;
+    }
+  }
+  const det = detectOpenings(px);
+  assert.equal(det.reason, 'ok');
+  for (let x = 83; x < 93; x++) assert.equal(det.open[x], 0, `幹の列 ${x}`);
 });

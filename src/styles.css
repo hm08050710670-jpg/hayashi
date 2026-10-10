@@ -441,6 +441,197 @@ button {
   font-size: 12px;
 }
 
+/* 推定成功率を主役にした表示。距離計の読み取り値のように、数字を大きく置く。 */
+.hud {
+  --tone: var(--unknown);
+  position: absolute;
+  inset: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px var(--gutter-r) 30px var(--gutter-l);
+  background: linear-gradient(rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0.78) 70%, rgba(0, 0, 0, 0));
+}
+
+.hud.green {
+  --tone: var(--ok);
+}
+
+.hud.yellow {
+  --tone: var(--warn);
+}
+
+.hud.red {
+  --tone: var(--bad);
+}
+
+.hud-caption {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.hud-caption span {
+  color: var(--fg-dim);
+  font-weight: 400;
+}
+
+.hud-main {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.hud-pct {
+  flex: none;
+  min-width: 2.3ch;
+  color: var(--tone);
+  font-size: 84px;
+  line-height: 0.9;
+  text-align: right;
+}
+
+.hud-pct small {
+  margin-left: 2px;
+  font-size: 34px;
+}
+
+.hud-side {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.hud-route {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.hud-level {
+  color: var(--tone);
+  font-weight: 700;
+}
+
+.hud-balls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+
+.balls {
+  display: inline-flex;
+  gap: 4px;
+}
+
+/* 通る球は塗りつぶし、通らない球は輪郭だけ。色に頼らず数えられる。 */
+.ball {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.45);
+  border-radius: 50%;
+}
+
+.ball.in {
+  border-color: var(--tone);
+  background: var(--tone);
+}
+
+.hud-balls-text {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* ばらつきの扇 */
+.fan-pass {
+  fill: var(--ok);
+}
+
+.fan-hit {
+  fill: var(--bad);
+}
+
+.gate-outline {
+  fill: none;
+  stroke: rgba(0, 0, 0, 0.75);
+  stroke-width: 7;
+  stroke-linecap: round;
+}
+
+.gate {
+  fill: none;
+  stroke: #ffffff;
+  stroke-width: 3.5;
+  stroke-linecap: round;
+}
+
+.aim-outline {
+  stroke: rgba(0, 0, 0, 0.7);
+  stroke-width: 6;
+  stroke-linecap: round;
+}
+
+.aim-line {
+  stroke: #ffffff;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+
+.aim-head {
+  fill: #ffffff;
+  stroke: rgba(0, 0, 0, 0.7);
+  stroke-width: 1.5;
+}
+
+.gate-badge {
+  fill: #ffffff;
+  stroke: rgba(0, 0, 0, 0.7);
+  stroke-width: 1.5;
+}
+
+.gate-badge-text {
+  fill: #000000;
+  font-family: var(--font-num);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.live-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  color: var(--fg-dim);
+  font-size: 11px;
+}
+
+.live-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.swatch.pass {
+  background: var(--ok);
+}
+
+.swatch.hit {
+  background: var(--bad);
+}
+
+.route-dot {
+  fill: var(--tone);
+  stroke: rgba(0, 0, 0, 0.7);
+  stroke-width: 1.5;
+}
+
 .live-panel {
   display: flex;
   flex-direction: column;
@@ -451,7 +642,7 @@ button {
 }
 
 .live-status {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -468,7 +659,7 @@ button {
   justify-content: center;
   gap: 8px;
   min-width: 0;
-  min-height: 44px;
+  min-height: 40px;
   padding: 0 6px;
   border: 2px solid var(--tone);
   border-radius: 8px;
@@ -497,7 +688,7 @@ button {
 }
 
 .live-route-pct {
-  font-size: 24px;
+  font-size: 20px;
   line-height: 1;
 }
 
@@ -1213,6 +1404,38 @@ tbody tr:last-child td {
 /* 背の低い画面では、映像の「判定する高さ」が隠れないよう、解析中の説明を省いて詰める。
    （省いた注意書きは、解析を始める前の確認画面に同じ内容がある） */
 @media (max-height: 700px) {
+  .hud {
+    gap: 2px;
+    padding-top: 6px;
+    padding-bottom: 18px;
+  }
+
+  .hud-pct {
+    font-size: 60px;
+  }
+
+  .hud-pct small {
+    font-size: 26px;
+  }
+
+  .hud-route {
+    font-size: 14px;
+  }
+
+  .hud-side {
+    font-size: 12px;
+  }
+
+  .ball {
+    width: 13px;
+    height: 13px;
+  }
+
+  .hud-balls-text {
+    font-size: 13px;
+  }
+
+  .live-legend,
   .live-detail,
   .live-panel ~ .mode-note,
   .live-controls ~ .mode-note {

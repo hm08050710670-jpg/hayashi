@@ -3,6 +3,7 @@ import type { LiveStatus } from '../analysis/live';
 import { OPENING_PARAMS } from '../analysis/openingDetector';
 import { useCamera, type CameraErrorKind } from '../camera/useCamera';
 import { useLiveAnalysis, type LiveMode } from '../camera/useLiveAnalysis';
+import { FanLayer } from '../components/FanLayer';
 import { GearIcon, ImageIcon } from '../components/Icons';
 import { ObstacleLayer } from '../components/ObstacleLayer';
 import { RouteLayer } from '../components/RouteLayer';
@@ -26,6 +27,9 @@ interface Props {
   onChangeScore: () => void;
   onOpenSettings: () => void;
 }
+
+/** 扇と矢印の付け根の高さ（映像の高さに対する割合）。帯の少し下に置く */
+const FAN_ORIGIN_Y = Math.min(1, OPENING_PARAMS.bandBottom + 0.16);
 
 /** 解析の状態ごとの表示。数値を出せない状態では、理由と次にすることを伝える。 */
 const LIVE_STATUS_TEXT: Record<LiveStatus | 'idle', string> = {
@@ -174,13 +178,25 @@ export function Capture({
   const obstacles = showResult ? view.obstacles : [];
   const selected = routes.find((r) => r.letter === pickedLetter) ?? routes.find((r) => r.isBest) ?? routes[0] ?? null;
 
+  // 選んだルートの数値を、画面の上部に大きく表示する。
+  const hero =
+    selected && selected.status === 'ok' && selected.probability !== null && selected.level
+      ? {
+          route: selected,
+          level: selected.level,
+          percent: percentText(selected.probability),
+          // 「10球打って何球通るか」に言い換える
+          balls: Math.round(selected.probability * 10),
+        }
+      : null;
+
   let statusText = LIVE_STATUS_TEXT[view.status];
   if (liveMode === 'paused') statusText = '一時停止中：表示は停止した時点の結果です';
   else if (live.stale) statusText = '解析が止まっています。表示を消しました';
   else if (view.status === 'ok') {
     if (view.result?.status === 'insufficient') statusText = '判定に必要な情報が不足しています（障害物が写っていません）';
     else if (routes.length === 0) statusText = '見通せる方向が見つかりません';
-    else statusText = `表示中：毎秒約${Math.max(1, Math.round(view.ratePerSec))}回更新（少し遅れて反映）`;
+    else statusText = `毎秒約${Math.max(1, Math.round(view.ratePerSec))}回更新（表示は少し遅れて反映）`;
   }
 
   return (
@@ -203,30 +219,75 @@ export function Capture({
               {view.frame ? (
                 <>
                   <ObstacleLayer obstacles={obstacles} size={fit} dim />
+                  {/* 選んでいないルートは、位置と数値だけを控えめに示す */}
                   <RouteLayer
-                    routes={routes}
+                    routes={routes.filter((r) => r.id !== selected?.id)}
                     obstacles={obstacles}
                     frame={view.frame}
                     focalEq={focalEq}
                     size={fit}
-                    selectedId={selected?.id ?? null}
-                    originY={Math.min(1, OPENING_PARAMS.bandBottom + 0.14)}
+                    selectedId={null}
+                    originY={FAN_ORIGIN_Y}
+                    compact
                     onSelect={(id) => setPickedLetter(routes.find((r) => r.id === id)?.letter ?? null)}
                   />
+                  {/* 選んだルートには、ショットのばらつきの扇を重ねる */}
+                  {selected && selected.status === 'ok' && view.result ? (
+                    <FanLayer
+                      route={selected}
+                      sigmaDeg={view.result.dirSigmaDeg}
+                      frame={view.frame}
+                      focalEq={focalEq}
+                      size={fit}
+                      originY={FAN_ORIGIN_Y}
+                      gateY={(OPENING_PARAMS.bandTop + OPENING_PARAMS.bandBottom) / 2}
+                    />
+                  ) : null}
                 </>
               ) : null}
             </svg>
           ) : null}
         </div>
 
-        <div className="guide">
-          <p className="guide-main">ボールの近くから、脱出したい方向にカメラを向けてください</p>
-          <p className="guide-sub">
-            {liveOn
-              ? 'スマートフォンをゆっくり動かすと、周囲の木を確認しやすくなります'
-              : '周囲に人やカートがいないことを確認してから撮影してください'}
-          </p>
-        </div>
+        {hero ? (
+          <div className={`hud ${hero.level}`}>
+            <p className="hud-caption">
+              推定成功率<span>（{MODEL_LABEL}）</span>
+            </p>
+            <div className="hud-main">
+              <span className="hud-pct num">
+                {hero.percent}
+                <small>%</small>
+              </span>
+              <span className="hud-side">
+                <span className="hud-route">
+                  ルート{hero.route.letter}：{directionLabel(hero.route.aimDeg)}
+                </span>
+                <span className="hud-level">難易度：{LEVEL_TEXT[hero.level]}</span>
+                <span className="hud-recommend">おすすめ度：{recommendText(hero.route)}</span>
+              </span>
+            </div>
+            <div className="hud-balls">
+              <span className="balls" role="img" aria-label={`10球のうち${hero.balls}球`}>
+                {Array.from({ length: 10 }, (_, i) => (
+                  <i key={i} className={i < hero.balls ? 'ball in' : 'ball'} />
+                ))}
+              </span>
+              <span className="hud-balls-text">
+                {hero.balls === 0 ? '10球打って 1球未満' : `10球打って 約${hero.balls}球`}
+              </span>
+            </div>
+          </div>
+        ) : (
+          <div className="guide">
+            <p className="guide-main">ボールの近くから、脱出したい方向にカメラを向けてください</p>
+            <p className="guide-sub">
+              {liveOn
+                ? 'スマートフォンをゆっくり動かすと、周囲の木を確認しやすくなります'
+                : '周囲に人やカートがいないことを確認してから撮影してください'}
+            </p>
+          </div>
+        )}
 
         {camera.state.status === 'starting' ? (
           <div className="viewfinder-msg" role="status">
@@ -261,33 +322,38 @@ export function Capture({
               <p className="live-status" role="status">
                 {statusText}
               </p>
-              {routes.length > 0 ? (
+              {routes.length > 1 ? (
+                <div className="live-routes" role="group" aria-label="候補ルート">
+                  {routes.map((route) => (
+                    <button
+                      key={route.letter}
+                      type="button"
+                      className={`live-route ${route.level ?? 'unknown'}`}
+                      aria-pressed={route.letter === selected?.letter}
+                      onClick={() => setPickedLetter(route.letter)}
+                    >
+                      <span className="live-route-letter num">{route.letter}</span>
+                      <span className="live-route-pct num">
+                        {route.probability !== null ? `${percentText(route.probability)}%` : '判定不能'}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              {hero && view.result ? (
                 <>
-                  <div className="live-routes" role="group" aria-label="候補ルート">
-                    {routes.map((route) => (
-                      <button
-                        key={route.letter}
-                        type="button"
-                        className={`live-route ${route.level ?? 'unknown'}`}
-                        aria-pressed={route.letter === selected?.letter}
-                        onClick={() => setPickedLetter(route.letter)}
-                      >
-                        <span className="live-route-letter num">{route.letter}</span>
-                        <span className="live-route-pct num">
-                          {route.probability !== null ? `${percentText(route.probability)}%` : '判定不能'}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                  {selected && selected.level && view.result ? (
-                    <p className="live-detail">
-                      <strong>
-                        {`ルート${selected.letter}：${directionLabel(selected.aimDeg)}　難易度：${LEVEL_TEXT[selected.level]}　おすすめ度：${recommendText(selected)}`}
-                      </strong>
-                      <br />
-                      {routeDescription(selected, view.result)}
-                    </p>
-                  ) : null}
+                  <p className="live-detail">{routeDescription(hero.route, view.result)}</p>
+                  <p className="live-legend">
+                    <span>
+                      <i className="swatch pass" />
+                      通る方向
+                    </span>
+                    <span>
+                      <i className="swatch hit" />
+                      当たる方向
+                    </span>
+                    <span>扇は、あなたのショットのばらつき</span>
+                  </p>
                 </>
               ) : null}
             </div>
@@ -336,7 +402,7 @@ export function Capture({
 
           {liveOn ? (
             <p className="mode-note">
-              {MODEL_LABEL}。斜線の範囲は「障害物または未確認」です。画面に映っていない範囲の障害物は判定できません
+              斜線の範囲は「障害物または未確認」です。画面に映っていない範囲の障害物は判定できません
             </p>
           ) : null}
         </div>
