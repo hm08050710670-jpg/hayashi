@@ -32,6 +32,9 @@ export function App() {
   const [clubId, setClubId] = useState<ClubId | null>(null);
   const [distanceM, setDistanceM] = useState<number | null>(null);
   const [safety, setSafety] = useState<Safety>('clear');
+  // リアルタイム解析は、撮影画面を開くと自動で始める。どちらも保存はせず、アプリを開き直すと初期値に戻る。
+  const [liveWanted, setLiveWanted] = useState(true);
+  const [liveSafetyConfirmed, setLiveSafetyConfirmed] = useState(false);
 
   // 使い終わった写真の一時URLを解放して、メモリを使い続けないようにする。
   const photoUrl = useRef<string | null>(null);
@@ -141,6 +144,8 @@ export function App() {
           releasePhotoUrl();
           setPhoto(null);
           setObstacles([]);
+          setLiveWanted(true);
+          setLiveSafetyConfirmed(false);
           setScreen('notice');
         }}
         onBack={() => setScreen(settingsReturn)}
@@ -192,6 +197,10 @@ export function App() {
       band={band}
       focalEq={focalEq}
       liveRate={liveRate}
+      liveWanted={liveWanted}
+      onLiveWanted={setLiveWanted}
+      safetyConfirmed={liveSafetyConfirmed}
+      onSafetyConfirmed={() => setLiveSafetyConfirmed(true)}
       onPhoto={takePhoto}
       onChangeScore={() => {
         setReturnTo('capture');

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ChangeEvent } from 'react';
 import type { LiveStatus } from '../analysis/live';
 import { OPENING_PARAMS } from '../analysis/openingDetector';
 import { useCamera, type CameraErrorKind } from '../camera/useCamera';
@@ -16,6 +16,12 @@ interface Props {
   focalEq: number;
   /** リアルタイム解析の目標の更新頻度（1秒あたりの回数） */
   liveRate: number;
+  /** カメラが映ったら、リアルタイム解析を自動で始めるか（「終了」を押すと、その起動中は自動で始めない） */
+  liveWanted: boolean;
+  onLiveWanted: (wanted: boolean) => void;
+  /** 今回の起動で、前方の安全を確認済みか */
+  safetyConfirmed: boolean;
+  onSafetyConfirmed: () => void;
   onPhoto: (photo: Photo) => void;
   onChangeScore: () => void;
   onOpenSettings: () => void;
@@ -68,7 +74,18 @@ const TRIAL_ERROR = {
   body: '下の「画像を読み込む」を押すと、その場で写真を撮るか、保存済みの写真を選んで解析できます。カメラのプレビューは、HTTPSで公開した本番用ファイルで動作します。',
 };
 
-export function Capture({ band, focalEq, liveRate, onPhoto, onChangeScore, onOpenSettings }: Props) {
+export function Capture({
+  band,
+  focalEq,
+  liveRate,
+  liveWanted,
+  onLiveWanted,
+  safetyConfirmed,
+  onSafetyConfirmed,
+  onPhoto,
+  onChangeScore,
+  onOpenSettings,
+}: Props) {
   const camera = useCamera();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -79,6 +96,20 @@ export function Capture({ band, focalEq, liveRate, onPhoto, onChangeScore, onOpe
   const ready = camera.state.status === 'ready';
   const error =
     camera.state.status === 'error' ? (IS_TRIAL ? TRIAL_ERROR : CAMERA_ERRORS[camera.state.error]) : null;
+
+  // カメラが映ったら、リアルタイム解析を自動で始める。
+  // 安全確認は起動ごとに1回だけ行い、確認が済むまでは始めない。
+  useEffect(() => {
+    if (!ready || !liveWanted) return;
+    if (safetyConfirmed) setMode((current) => (current === 'off' ? 'on' : current));
+    else setAskSafety(true);
+  }, [ready, liveWanted, safetyConfirmed]);
+
+  const startLive = () => {
+    onLiveWanted(true);
+    if (safetyConfirmed) setMode('on');
+    else setAskSafety(true);
+  };
 
   // カメラが使えなくなったら、解析も止める。
   const liveMode: LiveMode = ready ? mode : 'off';
@@ -265,7 +296,7 @@ export function Capture({ band, focalEq, liveRate, onPhoto, onChangeScore, onOpe
           {ready ? (
             <div className="live-controls">
               {liveMode === 'off' ? (
-                <button type="button" className="btn small primary" onClick={() => setAskSafety(true)}>
+                <button type="button" className="btn small primary" onClick={startLive}>
                   リアルタイム解析を開始（試験版）
                 </button>
               ) : (
@@ -288,7 +319,14 @@ export function Capture({ band, focalEq, liveRate, onPhoto, onChangeScore, onOpe
                   >
                     再解析
                   </button>
-                  <button type="button" className="btn small ghost" onClick={() => setMode('off')}>
+                  <button
+                    type="button"
+                    className="btn small ghost"
+                    onClick={() => {
+                      setMode('off');
+                      onLiveWanted(false);
+                    }}
+                  >
                     終了
                   </button>
                 </>
@@ -340,7 +378,7 @@ export function Capture({ band, focalEq, liveRate, onPhoto, onChangeScore, onOpe
         </div>
       </footer>
 
-      {askSafety ? (
+      {askSafety && ready ? (
         <div className="sheet-backdrop">
           <div className="sheet" role="dialog" aria-modal="true" aria-labelledby="live-safety-title">
             <h2 id="live-safety-title">前方の安全を確認してください</h2>
@@ -360,6 +398,8 @@ export function Capture({ band, focalEq, liveRate, onPhoto, onChangeScore, onOpe
                 onClick={() => {
                   setAskSafety(false);
                   setMessage(null);
+                  onSafetyConfirmed();
+                  onLiveWanted(true);
                   setMode('on');
                 }}
               >
@@ -370,13 +410,21 @@ export function Capture({ band, focalEq, liveRate, onPhoto, onChangeScore, onOpe
                 className="btn"
                 onClick={() => {
                   setAskSafety(false);
+                  onLiveWanted(false);
                   setMessage('安全を確認できるまで、リアルタイム解析は開始しません。');
                 }}
               >
                 人がいる・確認できない
               </button>
-              <button type="button" className="btn ghost" onClick={() => setAskSafety(false)}>
-                戻る
+              <button
+                type="button"
+                className="btn ghost"
+                onClick={() => {
+                  setAskSafety(false);
+                  onLiveWanted(false);
+                }}
+              >
+                解析せずに閉じる
               </button>
             </div>
           </div>
