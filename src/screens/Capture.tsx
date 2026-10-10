@@ -95,7 +95,8 @@ export function Capture({
   const [message, setMessage] = useState<string | null>(null);
   const [mode, setMode] = useState<LiveMode>('off');
   const [askSafety, setAskSafety] = useState(false);
-  const [pickedLetter, setPickedLetter] = useState<string | null>(null);
+  /** 利用者が選んだルート（同じ隙間を追っている間は変わらない id で覚える） */
+  const [pickedId, setPickedId] = useState<string | null>(null);
 
   const ready = camera.state.status === 'ready';
   const error =
@@ -176,7 +177,9 @@ export function Capture({
   const showResult = liveOn && view.status === 'ok' && !live.stale;
   const routes = showResult ? view.routes : [];
   const obstacles = showResult ? view.obstacles : [];
-  const selected = routes.find((r) => r.letter === pickedLetter) ?? routes.find((r) => r.isBest) ?? routes[0] ?? null;
+  // 選んだルートがあればそれを、なければ主役のルートを大きく表示する。
+  const selected =
+    routes.find((r) => r.id === pickedId) ?? routes.find((r) => r.id === view.leaderId) ?? routes[0] ?? null;
 
   // 選んだルートの数値を、画面の上部に大きく表示する。
   const hero =
@@ -229,7 +232,7 @@ export function Capture({
                     selectedId={null}
                     originY={FAN_ORIGIN_Y}
                     compact
-                    onSelect={(id) => setPickedLetter(routes.find((r) => r.id === id)?.letter ?? null)}
+                    onSelect={setPickedId}
                   />
                   {/* 選んだルートには、ショットのばらつきの扇を重ねる */}
                   {selected && selected.status === 'ok' && view.result ? (
@@ -330,7 +333,7 @@ export function Capture({
                       type="button"
                       className={`live-route ${route.level ?? 'unknown'}`}
                       aria-pressed={route.letter === selected?.letter}
-                      onClick={() => setPickedLetter(route.letter)}
+                      onClick={() => setPickedId(route.id)}
                     >
                       <span className="live-route-letter num">{route.letter}</span>
                       <span className="live-route-pct num">
@@ -379,7 +382,7 @@ export function Capture({
                     className="btn small"
                     onClick={() => {
                       live.reset();
-                      setPickedLetter(null);
+                      setPickedId(null);
                       setMode('on');
                     }}
                   >

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { LIVE_PARAMS, LiveAnalyzer, smoothRoutes, type LiveStatus } from '../analysis/live';
+import { LIVE_PARAMS, LiveAnalyzer, RouteTracker, type LiveStatus } from '../analysis/live';
 import { OPENING_PARAMS, detectOpenings, type BlockedSpan } from '../analysis/openingDetector';
 import { DEFAULT_CLEARANCE, DEFAULT_LIE, type ScoreBand } from '../model/params';
 import { computeRoutes } from '../model/routes';
@@ -11,7 +11,10 @@ export interface LiveView {
   /** idle: まだ1回も解析していない */
   status: LiveStatus | 'idle';
   obstacles: Obstacle[];
+  /** 追跡してなめらかにしたルート（最大3件）。id は同じ隙間を追っている間は変わらない */
   routes: Route[];
+  /** 主役として表示するルートの id */
+  leaderId: string | null;
   result: RouteResult | null;
   /** 解析した画像の縦横比を保った大きさ（角度の換算に使う） */
   frame: { width: number; height: number } | null;
@@ -25,6 +28,7 @@ const IDLE: LiveView = {
   status: 'idle',
   obstacles: [],
   routes: [],
+  leaderId: null,
   result: null,
   frame: null,
   ratePerSec: 0,
@@ -63,14 +67,14 @@ export function useLiveAnalysis({ mode, grabPixels, band, focalEq, targetRate }:
   const [view, setView] = useState<LiveView>(IDLE);
   const [stale, setStale] = useState(false);
   const analyzer = useRef(new LiveAnalyzer());
-  const previousRoutes = useRef<Route[]>([]);
+  const tracker = useRef(new RouteTracker());
   // 解析の途中で条件が変わっても、次の回から新しい条件を使えるように最新の値を持っておく。
   const latest = useRef({ band, focalEq, grabPixels });
   latest.current = { band, focalEq, grabPixels };
 
   const reset = useCallback(() => {
     analyzer.current.reset();
-    previousRoutes.current = [];
+    tracker.current.reset();
     setView(IDLE);
     setStale(false);
   }, []);
@@ -99,6 +103,7 @@ export function useLiveAnalysis({ mode, grabPixels, band, focalEq, targetRate }:
         const frame = { width: pixels.width, height: pixels.height };
         let obstacles: Obstacle[] = [];
         let routes: Route[] = [];
+        let leaderId: string | null = null;
         let result: RouteResult | null = null;
         if (step.status === 'ok') {
           obstacles = spansToObstacles(step.spans, detection.bandTop, detection.bandBottom);
@@ -111,16 +116,26 @@ export function useLiveAnalysis({ mode, grabPixels, band, focalEq, targetRate }:
             distanceM: null,
             focalEq: curFocal,
           });
-          routes = smoothRoutes(previousRoutes.current, result.routes);
+          const tracked = tracker.current.update(
+            result.routes,
+            step.shift,
+            lastTick > 0 ? started - lastTick : 250,
+            frame,
+            curFocal,
+          );
+          routes = tracked.routes;
+          leaderId = tracked.leaderId;
+        } else {
+          // 判定できない状態になったら、追跡もやり直す（古い位置や数値を引き継がない）。
+          tracker.current.reset();
         }
-        previousRoutes.current = routes;
 
         if (lastTick > 0) {
           const instant = 1000 / Math.max(1, started - lastTick);
           rate = rate === 0 ? instant : rate * 0.7 + instant * 0.3;
         }
         lastTick = started;
-        setView({ status: step.status, obstacles, routes, result, frame, ratePerSec: rate, capturedAt: started });
+        setView({ status: step.status, obstacles, routes, leaderId, result, frame, ratePerSec: rate, capturedAt: started });
         setStale(false);
       }
 
