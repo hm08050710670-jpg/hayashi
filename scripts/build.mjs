@@ -65,7 +65,9 @@ if (single) {
       /\s*<script type="module" src="\.\/src\/main\.tsx"><\/script>/,
       `\n    <script type="module" src="./assets/${js}"></script>`,
     )
-    .replace('</title>', `</title>\n    <link rel="stylesheet" href="./assets/${css}" />`);
+    .replace('</title>', `</title>\n    <link rel="stylesheet" href="./assets/${css}" />`)
+    // 開発用の入口だけに必要な「docs/ への移動」は、ビルド後のファイルからは取り除く。
+    .replace(/\s*<!-- pages-redirect:start -->[\s\S]*?<!-- pages-redirect:end -->/, '');
   if (!html.includes(js) || !html.includes(css)) throw new Error('index.html の書き換えに失敗しました');
   await writeFile(path.join(outDir, 'index.html'), html);
   await cp(path.join(root, 'public'), outDir, { recursive: true });

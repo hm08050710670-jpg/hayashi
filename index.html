@@ -31,5 +31,15 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <!-- pages-redirect:start -->
+    <script>
+      // このファイルは開発用の入口で、そのままではブラウザーで動かない。
+      // GitHub Pages がリポジトリ直下を公開している場合は、ビルド済みの docs/ へ移動する。
+      // （ビルド後のファイルでは上の main.tsx の読み込みが置き換わるため、この移動は起きない）
+      if (/\.github\.io$/.test(location.hostname) && document.querySelector('script[src$="/src/main.tsx"]')) {
+        location.replace('./docs/');
+      }
+    </script>
+    <!-- pages-redirect:end -->
   </body>
 </html>
